@@ -44,15 +44,36 @@ class NightreignMapRecogniser {
         this.currentSeedIndex = -1;
         this.availableSeeds = [];
         
+        // Debounced seed filtering to prevent UI freezing
+        this.debouncedUpdateSeedFiltering = this.debounce(this.updateSeedFiltering.bind(this), 300);
+        
+        // Cache DOM elements to avoid repeated queries
+        this.domElements = {
+            seedCount: null,
+            possibleSeedsSection: null,
+            possibleSeedsGrid: null,
+            canvas: null,
+            seedImageContainer: null
+        };
+        
         
         this.init();
     }
 
     async init() {
+        this.cacheDOMElements();
         this.setupImages();
         this.setupEventListeners();
         await this.loadInitialData();
         this.showSelectionSection();
+    }
+
+    cacheDOMElements() {
+        this.domElements.seedCount = document.getElementById('seed-count');
+        this.domElements.possibleSeedsSection = document.getElementById('possible-seeds-section');
+        this.domElements.possibleSeedsGrid = document.getElementById('possible-seeds-grid');
+        this.domElements.canvas = document.getElementById('map-canvas');
+        this.domElements.seedImageContainer = document.getElementById('seed-image-container');
     }
 
 
@@ -224,14 +245,14 @@ class NightreignMapRecogniser {
     renderDefaultMap() {
         console.log('Rendering default map for immediate interaction');
         
-        const canvas = document.getElementById('map-canvas');
+        const canvas = this.domElements.canvas;
         if (!canvas) {
             console.error('Canvas element not found!');
             return;
         }
         
         canvas.style.display = 'block';
-        document.getElementById('seed-image-container').style.display = 'none';
+        this.domElements.seedImageContainer.style.display = 'none';
         
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
@@ -388,7 +409,7 @@ class NightreignMapRecogniser {
             this.showInteractionSection();
             this.showResultsSection();
             this.renderMap();
-            this.updateSeedFiltering();
+            this.debouncedUpdateSeedFiltering();
             this.hideSelectionOverlay();
         } else {
             // Always update seed count when selections change
@@ -424,14 +445,14 @@ class NightreignMapRecogniser {
     setupContextMenu() {
         this.contextMenu = document.getElementById('poi-context-menu');
         
-        // Handle context menu item clicks
+        // Handle context menu item clicks with debouncing
         document.querySelectorAll('.context-menu-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 const type = e.currentTarget.dataset.type;
                 if (this.currentRightClickedPOI) {
                     this.poiStates[this.currentRightClickedPOI.id] = type;
                     this.drawMap(this.images.maps[this.chosenMap]);
-                    this.updateSeedFiltering();
+                    this.debouncedUpdateSeedFiltering();
                     this.hideContextMenu();
                     this.currentRightClickedPOI = null;
                 }
@@ -460,8 +481,8 @@ class NightreignMapRecogniser {
         console.log(`Rendering map for ${this.chosenMap}`);
         
         const mapContainer = document.querySelector('.map-container');
-        const canvas = document.getElementById('map-canvas');
-        const seedImageContainer = document.getElementById('seed-image-container');
+        const canvas = this.domElements.canvas;
+        const seedImageContainer = this.domElements.seedImageContainer;
         
         if (!canvas) {
             console.error('Canvas element not found!');
@@ -591,7 +612,7 @@ class NightreignMapRecogniser {
     }
 
     setupCanvasEventListeners() {
-        // Left click - place church
+        // Left click - place church with debounced filtering
         this.canvas.addEventListener('click', (e) => {
             if (!this.chosenNightlord || !this.chosenMap) {
                 console.log('Please select both Nightlord and Map before marking POIs');
@@ -602,7 +623,7 @@ class NightreignMapRecogniser {
             if (poi) {
                 this.poiStates[poi.id] = 'church';
                 this.drawMap(this.images.maps[this.chosenMap]);
-                this.updateSeedFiltering();
+                this.debouncedUpdateSeedFiltering();
             }
         });
 
@@ -634,7 +655,7 @@ class NightreignMapRecogniser {
                 if (poi) {
                     this.poiStates[poi.id] = 'unknown';
                     this.drawMap(this.images.maps[this.chosenMap]);
-                    this.updateSeedFiltering();
+                    this.debouncedUpdateSeedFiltering();
                 }
             }
         });
@@ -684,12 +705,12 @@ class NightreignMapRecogniser {
         }
         
         // Show the canvas and hide seed image container
-        const canvas = document.getElementById('map-canvas');
-        const seedImageContainer = document.getElementById('seed-image-container');
+        const canvas = this.domElements.canvas;
+        const seedImageContainer = this.domElements.seedImageContainer;
         canvas.style.display = 'block';
         seedImageContainer.style.display = 'none';
         
-        this.updateSeedFiltering();
+        this.debouncedUpdateSeedFiltering();
     }
 
 
@@ -704,7 +725,7 @@ class NightreignMapRecogniser {
     updateSeedCount() {
         if (!this.chosenNightlord && !this.chosenMap) {
             const allSeeds = getAllSeeds();
-            document.getElementById('seed-count').textContent = allSeeds.length || '320';
+            this.domElements.seedCount.textContent = allSeeds.length || '320';
             return;
         }
 
@@ -713,7 +734,7 @@ class NightreignMapRecogniser {
         this.updateSeedCountDisplay(filteredSeeds.length);
     }
 
-    updateSeedFiltering() {
+    async updateSeedFiltering() {
         if (!this.chosenNightlord || !this.chosenMap) {
             this.updateSeedCount();
             this.hideSeedDetails();
@@ -730,67 +751,15 @@ class NightreignMapRecogniser {
         const possibleSeeds = getFilteredSeeds(this.chosenNightlord, this.chosenMap);
         console.log(`Found ${possibleSeeds.length} seeds for ${this.chosenNightlord} + ${this.chosenMap}`);
 
-        // Filter by POI states using coordinate-based matching
-        const filteredSeeds = possibleSeeds.filter(seed => {
-            const seedNum = seed.seedNumber;
-            console.log(`\n🔍 Checking Seed ${seedNum}:`);
-            
-            for (const poi of this.currentPOIs) {
-                const userState = this.poiStates[poi.id];
-                
-                // If user hasn't marked this POI yet, skip it
-                if (userState === 'dot') {
-                    console.log(`  POI ${poi.id} at (${poi.x}, ${poi.y}): User hasn't marked - SKIPPING`);
-                    continue;
-                }
-                
-                console.log(`  POI ${poi.id} at (${poi.x}, ${poi.y}): User marked as ${userState.toUpperCase()}`);
-                
-                // Find what POI type exists at this coordinate in the real seed data
-                const realPOIType = getPOITypeAtCoordinate(seedNum, poi.x, poi.y);
-                console.log(`    Real data shows: ${realPOIType || 'NOTHING'} at this location`);
-                
-                // If user marked as unknown (?), reject if seed has Church/Mage/Village here
-                if (userState === 'unknown') {
-                    if (realPOIType === 'church' || realPOIType === 'mage' || realPOIType === 'village') {
-                        console.log(`    ❌ REJECTED: User said unknown but real data has ${realPOIType}`);
-                        return false;
-                    }
-                    console.log(`    ✅ OK: User said unknown and real data has ${realPOIType || 'nothing'}`);
-                    continue;
-                }
+        // Show loading indicator for large datasets
+        if (possibleSeeds.length > 50) {
+            this.showFilteringProgress();
+        }
 
-                // User has marked as church, mage, or other - seed MUST match exactly
-                if (userState === 'church') {
-                    if (realPOIType !== 'church') {
-                        console.log(`    ❌ REJECTED: User said church but real data has ${realPOIType || 'nothing'}`);
-                        return false;
-                    }
-                    console.log(`    ✅ MATCH: User said church and real data has church`);
-                } else if (userState === 'mage') {
-                    if (realPOIType !== 'mage') {
-                        console.log(`    ❌ REJECTED: User said mage but real data has ${realPOIType || 'nothing'}`);
-                        return false;
-                    }
-                    console.log(`    ✅ MATCH: User said mage and real data has mage`);
-                } else if (userState === 'village') {
-                    if (realPOIType !== 'village') {
-                        console.log(`    ❌ REJECTED: User said village but real data has ${realPOIType || 'nothing'}`);
-                        return false;
-                    }
-                    console.log(`    ✅ MATCH: User said village and real data has village`);
-                } else if (userState === 'other') {
-                    if (realPOIType === 'church' || realPOIType === 'mage' || realPOIType === 'village' || !realPOIType) {
-                        console.log(`    ❌ REJECTED: User said other POI but real data has ${realPOIType || 'nothing'}`);
-                        return false;
-                    }
-                    console.log(`    ✅ MATCH: User said other POI and real data has ${realPOIType}`);
-                }
-            }
-            console.log(`  ✅ Seed ${seedNum} PASSED all POI checks`);
-            return true;
-        });
+        // Batch process seeds to prevent UI freezing
+        const filteredSeeds = await this.filterSeedsAsync(possibleSeeds);
 
+        this.hideFilteringProgress();
         console.log(`After POI filtering: ${filteredSeeds.length} seeds remaining`);
 
         this.updateSeedCountDisplay(filteredSeeds.length);
@@ -798,32 +767,91 @@ class NightreignMapRecogniser {
         if (filteredSeeds.length === 0) {
             this.showNoSeedsFound();
         } else {
-            // Always show possible seeds (whether 1 or multiple)
             this.showPossibleSeeds(filteredSeeds);
         }
     }
 
+    async filterSeedsAsync(possibleSeeds) {
+        const filteredSeeds = [];
+        const batchSize = 20; // Process 20 seeds at a time
+        
+        for (let i = 0; i < possibleSeeds.length; i += batchSize) {
+            const batch = possibleSeeds.slice(i, i + batchSize);
+            
+            const batchResults = batch.filter(seed => {
+                const seedNum = seed.seedNumber;
+                
+                for (const poi of this.currentPOIs) {
+                    const userState = this.poiStates[poi.id];
+                    
+                    // If user hasn't marked this POI yet, skip it
+                    if (userState === 'dot') {
+                        continue;
+                    }
+                    
+                    // Find what POI type exists at this coordinate in the real seed data
+                    const realPOIType = getPOITypeAtCoordinate(seedNum, poi.x, poi.y);
+                    
+                    // If user marked as unknown (?), reject if seed has Church/Mage/Village here
+                    if (userState === 'unknown') {
+                        if (realPOIType === 'church' || realPOIType === 'mage' || realPOIType === 'village') {
+                            return false;
+                        }
+                        continue;
+                    }
+
+                    // User has marked as church, mage, village, or other - seed MUST match exactly
+                    if ((userState === 'church' && realPOIType !== 'church') ||
+                        (userState === 'mage' && realPOIType !== 'mage') ||
+                        (userState === 'village' && realPOIType !== 'village') ||
+                        (userState === 'other' && (realPOIType === 'church' || realPOIType === 'mage' || realPOIType === 'village' || !realPOIType))) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+            
+            filteredSeeds.push(...batchResults);
+            
+            // Yield control to prevent UI freezing
+            if (i + batchSize < possibleSeeds.length) {
+                await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+        }
+        
+        return filteredSeeds;
+    }
+
+    showFilteringProgress() {
+        const seedCountElement = this.domElements.seedCount;
+        seedCountElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i><br>Filtering...';
+    }
+
+    hideFilteringProgress() {
+        // Will be updated by updateSeedCountDisplay
+    }
+
     updateSeedCountDisplay(count) {
-        const seedCountElement = document.getElementById('seed-count');
+        const seedCountElement = this.domElements.seedCount;
         seedCountElement.textContent = count;
         seedCountElement.className = count === 0 ? 'seed-count no-seeds' : 'seed-count';
     }
 
     showNoSeedsFound() {
-        const seedCountElement = document.getElementById('seed-count');
+        const seedCountElement = this.domElements.seedCount;
         seedCountElement.innerHTML = '<span style="color: #e74c3c; font-weight: 600;">NO SEED FOUND<br>RESET THE MAP!</span>';
     }
 
 
     showSeedImage(mapSeed) {
-        const canvas = document.getElementById('map-canvas');
-        const seedImageContainer = document.getElementById('seed-image-container');
+        const canvas = this.domElements.canvas;
+        const seedImageContainer = this.domElements.seedImageContainer;
         
         canvas.style.display = 'none';
         seedImageContainer.style.display = 'block';
         
         const seedStr = mapSeed.toString().padStart(3, '0');
-        const seedImageUrl = "https://www.trc-playground.hu/GameZ/NightreignSeeds/Seeds/" + seedStr + ".jpg";
+        const seedImageUrl = `assets/pattern/${seedStr}.jpg`;
         
         seedImageContainer.innerHTML = `
             <center>
@@ -922,15 +950,18 @@ class NightreignMapRecogniser {
 
     showPossibleSeeds(seeds) {
         this.showingSeedImage = false;
-        this.renderMap();
+        // Only render map if we're not already showing possible seeds
+        if (this.domElements.possibleSeedsSection.style.display !== 'block') {
+            this.renderMap();
+        }
         
         // Store seeds for arrow key navigation
         this.availableSeeds = seeds.sort((a, b) => a.seedNumber - b.seedNumber);
         this.currentSeedIndex = -1;
         
         // Show the possible seeds section
-        const possibleSeedsSection = document.getElementById('possible-seeds-section');
-        const possibleSeedsGrid = document.getElementById('possible-seeds-grid');
+        const possibleSeedsSection = this.domElements.possibleSeedsSection;
+        const possibleSeedsGrid = this.domElements.possibleSeedsGrid;
         
         possibleSeedsSection.style.display = 'block';
         
@@ -981,7 +1012,7 @@ class NightreignMapRecogniser {
     }
 
     hidePossibleSeeds() {
-        const possibleSeedsSection = document.getElementById('possible-seeds-section');
+        const possibleSeedsSection = this.domElements.possibleSeedsSection;
         possibleSeedsSection.style.display = 'none';
         
         // Clear seed navigation state
@@ -1045,6 +1076,19 @@ class NightreignMapRecogniser {
                 seedItems[this.currentSeedIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
+    }
+
+    // Utility function for debouncing
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
 
 

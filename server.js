@@ -76,7 +76,6 @@ server.listen(PORT, 'localhost', () => {
     console.log('Available pages:');
     console.log(`  📊 Main app: http://localhost:${PORT}/index.html`);
     console.log(`  🔧 POI extraction: http://localhost:${PORT}/extraction.html`);
-    console.log(`  🤖 Supervised learning: http://localhost:${PORT}/poi-supervised-learning.html`);
     console.log('');
     console.log('Press Ctrl+C to stop the server');
 });

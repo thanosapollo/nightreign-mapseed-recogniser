@@ -1,11 +1,18 @@
+     #+BEGIN_HTML
 
-You can access the site [[https://thanosapollo.github.io/nightreign-mapseed-recogniser/][here]]
+<a href="https://github.com/thanosapollo/nightreign-mapseed-recogniser/actions/workflows/pages/pages-build-deployment">
+ <img src="https://github.com/thanosapollo/nightreign-mapseed-recogniser/actions/workflows/pages/pages-build-deployment/badge.svg" alt="Deployment" />
+</a>
+<br>
+<h3 align="center"> You can access the site <a href="https://thanosapollo.github.io/nightreign-mapseed-recogniser/"> here </a>
+   #+END_HTML
+
 
 * About
 
 Map seed recognizer for [[https://en.bandainamcoent.eu/elden-ring/elden-ring-nightreign][Elden Ring Nightreign]].
 
-How to use:
+** How to use:
 
 + Select Nightlord & Map/Shifting Earth
 + Select the POIs of the map, which include Village, Church of Vows &
